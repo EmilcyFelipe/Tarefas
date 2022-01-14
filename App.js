@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -21,18 +21,24 @@ import {
   onValue, 
   push, 
   ref, 
+  remove, 
   set,
+  update,
 } from "firebase/database";
-import { getAuth } from "firebase/auth";
+
+import { Feather } from '@expo/vector-icons';
+
 
 export default function App() {
   const [user, setUser] = useState(null);
+  
+  const inputRef = useRef(null);
   const [tasks, setTasks] = useState([])
 
   const [newTask, setNewTask] = useState('');
+  const [ key, setKey ] = useState('');
 
   const database = getDatabase();
-  const auth = getAuth();
   
 
   useEffect(()=>{
@@ -61,6 +67,23 @@ export default function App() {
     if(newTask === ''){
       return;
     }
+
+    // Usuario quer editar uma tarefa.
+    if(key !== ''){
+      let tarefas = ref(database, 'tarefas/'+user+'/'+key)
+      update(tarefas,{nome:newTask})
+      .then(()=>{
+        const tasksIndex = tasks.findIndex((item)=> item.key === key);
+        let taskClone = tasks;
+        taskClone[tasksIndex].nome = newTask;
+        setTasks([...taskClone]);
+      })
+      Keyboard.dismiss();
+      setNewTask('');
+      setKey('');
+      return;
+    }
+
     let tarefas = ref(database, 'tarefas/'+user);
     let chave = push(tarefas).key;
     tarefas = ref(database,'tarefas/'+user+'/'+chave)
@@ -73,19 +96,32 @@ export default function App() {
       };
       setTasks(oldTasks => [...oldTasks, data])
     })
-    
-    
 
     Keyboard.dismiss();
     setNewTask('')
   }
 
   function handleDelete(key) {
-    console.log(key);
+    console.log(key)
+    let tarefas = ref(database, 'tarefas/'+user+'/'+key);
+    remove(tarefas)
+    .then(()=>{
+      const findTasks = tasks.filter( item => item.key !== key);
+      setTasks(findTasks);
+    })
   }
 
   function handleEdit(data) {
-    console.log("Item clicado", data);
+    setKey(data.key);
+    setNewTask(data.nome);
+    inputRef.current.focus();
+    
+  }
+
+  function cancelEdit(){
+    setKey('');
+    setNewTask('');
+    Keyboard.dismiss();
   }
 
   if (!user) {
@@ -93,8 +129,15 @@ export default function App() {
   }
   return (
     <SafeAreaView style={styles.container}>
+      {key!=='' && (<View style={styles.editMessage}>
+        <TouchableOpacity onPress={cancelEdit}>
+          <Feather name="x-circle" size={24} color="#ff0000" />
+        </TouchableOpacity>
+        <Text style={{color: '#ff0000', marginLeft: 5}}>Voce está editando uma tarefa</Text>
+      </View>)}
+
       <View style={styles.containerTask}>
-        <TextInput onChangeText={(text)=>setNewTask(text)} value={newTask}style={styles.input} placeholder="O que vai fazer hoje?" />
+        <TextInput ref={inputRef} onChangeText={(text)=>setNewTask(text)} value={newTask}style={styles.input} placeholder="O que vai fazer hoje?" />
         <TouchableOpacity style={styles.buttonAdd} onPress={handleAdd}>
           <Text style={styles.buttonText}>+</Text>
         </TouchableOpacity>
@@ -120,6 +163,10 @@ const styles = StyleSheet.create({
     paddingTop: 25,
     paddingHorizontal: 10,
     backgroundColor: "#f2f6fc",
+  },
+  editMessage:{
+    flexDirection: 'row',
+    marginBottom:10
   },
   containerTask: {
     flexDirection: "row",
